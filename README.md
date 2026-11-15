@@ -23,6 +23,10 @@ edge of the window, the window moves with it.
 
 - While paused, the timeline outside the window is shaded, as with any
   preview range. That's the window.
+- Jump to Endpoint (Shift+Left/Right) jumps to the window's edges while
+  paused, since it follows the preview range.
+- Switch the window off with the timeline's preview-range toggle and your
+  own numbers come back. The window returns when the playhead moves.
 - When playback starts, the range is handed back right away, so playback
   runs over the whole scene. When you stop, the window comes back.
 - If you turn on or change the preview range yourself, yours wins. The

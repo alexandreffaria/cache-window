@@ -27,7 +27,9 @@ class _Editor:
 
 class _Scene(dict):
     """A scene: attributes for RNA properties, items for ID properties.
-    The preview range clamps like Blender's: start never after end."""
+    The preview range behaves like Blender 5.2's: start never after end,
+    and while the range is off, setting one end resets the other to the
+    scene's."""
 
     def __init__(self, name="Edit"):
         super().__init__()
@@ -47,6 +49,8 @@ class _Scene(dict):
 
     @frame_preview_start.setter
     def frame_preview_start(self, v):
+        if not self.use_preview_range:
+            self._pe = self.frame_end
         self._ps = min(v, self._pe)
 
     @property
@@ -55,6 +59,8 @@ class _Scene(dict):
 
     @frame_preview_end.setter
     def frame_preview_end(self, v):
+        if not self.use_preview_range:
+            self._ps = self.frame_start
         self._pe = max(v, self._ps)
 
 
@@ -210,6 +216,39 @@ class AddonTest(unittest.TestCase):
         self.prefs.enabled = False
         self.cw.tick()
         self.assertEqual(self.user_range(), (True, 900, 1120))
+
+    def test_the_first_borrow_sets_the_window_exactly(self):
+        # Blender resets the other end while the range is off; the window
+        # must still come out right on the first step
+        self.scene._ps, self.scene._pe = 0, 0
+        self.cw.tick()
+        self.assertEqual(self.user_range(), (True, 880, 1120))
+        self.prefs.enabled = False
+        self.cw.tick()
+        self.assertEqual(self.user_range(), (False, 0, 0))
+
+    def test_switching_the_window_off_gives_the_users_numbers_back(self):
+        self.cw.tick()
+        self.scene.use_preview_range = False  # the timeline's toggle
+        self.cw.tick()
+        self.assertEqual(self.user_range(), (False, 100, 300))
+        self.assertNotIn("cache_window", self.scene)
+        self.cw.tick()
+        self.assertEqual(self.user_range(), (False, 100, 300))
+        self.prefs.enabled = False
+        self.cw.tick()
+        self.assertEqual(self.user_range(), (False, 100, 300))
+
+    def test_after_switching_it_off_it_comes_back_when_the_playhead_moves(self):
+        self.cw.tick()
+        self.scene.use_preview_range = False
+        self.cw.tick()
+        self.scene.frame_current += 1
+        self.cw.tick()
+        self.assertEqual(self.user_range(), (True, 881, 1121))
+        self.prefs.enabled = False
+        self.cw.tick()
+        self.assertEqual(self.user_range(), (False, 100, 300))
 
     def test_no_prefetch_no_window(self):
         self.scene.sequence_editor.use_prefetch = False

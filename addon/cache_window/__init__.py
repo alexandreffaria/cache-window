@@ -63,7 +63,9 @@ def _drop_marker(scene):
 
 def _set_range(scene, start, end):
     """Sets the preview range in an order Blender won't clamp: it keeps the
-    start at or before the end at every step."""
+    start at or before the end at every step. Only while the range is on:
+    while it's off, Blender resets the other end to the scene's on every
+    set."""
     if start > scene.frame_preview_end:
         scene.frame_preview_end = end
         scene.frame_preview_start = start
@@ -79,12 +81,26 @@ def release(scene):
     if scene is None:
         return
     m = _marker(scene)
-    if m is not None and _is_ours(scene, m):
-        _set_range(scene, m["user_start"], m["user_end"])
-        scene.use_preview_range = False
+    if m is not None and (_is_ours(scene, m) or _turned_off(scene, m)):
+        _give_back(scene, m)
     _drop_marker(scene)
     if _state["scene"] == scene.name:
         _state["scene"] = None
+
+
+def _turned_off(scene, m):
+    """Whether the user switched the borrowed range off without changing
+    it: the numbers are still the window's."""
+    return (not scene.use_preview_range
+            and scene.frame_preview_start == m["start"]
+            and scene.frame_preview_end == m["end"])
+
+
+def _give_back(scene, m):
+    """Puts the user's numbers back and leaves the range off."""
+    scene.use_preview_range = True
+    _set_range(scene, m["user_start"], m["user_end"])
+    scene.use_preview_range = False
 
 
 def release_all():
@@ -103,8 +119,8 @@ def borrow(scene, start, end):
     if m is None:
         m = {"user_start": scene.frame_preview_start,
              "user_end": scene.frame_preview_end}
-    _set_range(scene, start, end)
     scene.use_preview_range = True
+    _set_range(scene, start, end)
     m["start"] = scene.frame_preview_start
     m["end"] = scene.frame_preview_end
     scene[MARKER] = m
@@ -190,6 +206,14 @@ def update(scene, prefs):
             return TICK
         _state["hold"] = None
     m = _marker(scene)
+    if m is not None and _turned_off(scene, m):
+        # The user switched the window off: give their numbers back and
+        # wait for the playhead to move before borrowing again
+        _give_back(scene, m)
+        _drop_marker(scene)
+        _state["scene"] = None
+        _state["hold"] = (scene.name, scene.frame_current)
+        return TICK
     if m is not None and not _is_ours(scene, m):
         # The user changed the range while it was borrowed: it's theirs now
         _drop_marker(scene)

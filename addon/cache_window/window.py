@@ -9,7 +9,10 @@ functions pick that window and decide when to move it.
 
 # Leave some of the memory cache for whatever else Blender caches
 BUDGET_SHARE = 0.9
-BYTES_PER_PIXEL = 4  # 8-bit RGBA, what the VSE caches for video
+# 8-bit RGBA, what the VSE caches for video. Float images take 16, so a
+# project with float strips can overrun the estimate; the cache then drops
+# the frames farthest from the playhead, as without the add-on.
+BYTES_PER_PIXEL = 4
 MIN_FRAMES = 3  # a window smaller than this isn't worth borrowing the range
 
 
