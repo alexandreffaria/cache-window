@@ -80,6 +80,33 @@ def plan(frame, scene_start, scene_end, behind, ahead, budget=None):
     return start, end
 
 
+MAX_STEPS = 8  # past this, each step takes a bigger bite
+
+
+def steps(anchor, full, step):
+    """The windows to grow through towards full, nearest frames first.
+
+    Prefetch fills ahead of the playhead first and the part behind it from
+    the far end in, so each step adds one band behind the playhead (step
+    frames, more if there would be over MAX_STEPS), with only one band
+    ahead, and the last step is the full window."""
+    start, end = full
+    anchor = min(max(int(anchor), start), end)
+    behind = anchor - start
+    step = max(int(step), 1, -(-behind // MAX_STEPS))
+    ahead = min(end, anchor + step)
+    out = []
+    b = anchor
+    while True:
+        b = max(start, b - step)
+        out.append((b, ahead))
+        if b == start:
+            break
+    if out[-1] != (start, end):
+        out.append((start, end))
+    return out
+
+
 def should_move(frame, current, target):
     """Whether to move the window from current to target for a playhead at
     frame. It moves when there is none yet, when its size changed, when

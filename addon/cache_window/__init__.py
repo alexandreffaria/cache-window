@@ -11,7 +11,15 @@ add-on is turned off.
 While the range is borrowed, the scene has a "cache_window" property with
 the "start" and "end" it set. Other add-ons that treat the preview range as
 the playback range can check it and ignore a borrowed range.
+
+Prefetch fills its range in one order: from just behind the playhead to the
+end, then from the start of the range up to the playhead. So the frames
+just behind the playhead, the ones you step back to, would come last. The
+window is therefore grown in steps instead: a second behind at a time, with
+prefetch restarted at each step, and only then the full width ahead.
 """
+
+import time
 
 import bpy
 from bpy.app.handlers import persistent
@@ -21,12 +29,23 @@ from . import window
 MARKER = "cache_window"
 TICK = 0.1  # seconds between checks while working
 IDLE_TICK = 0.5  # while turned off or nothing to do
+STEP_SECONDS = 1.0  # footage each step adds behind the playhead
+STEP_WAIT = 0.4  # seconds each step gets to fill before the next one
 
 # "scene": name of the scene whose range is borrowed, so it's handed back
 # when the window shows another scene. "hold": (scene name, frame) after a
 # save; the range isn't borrowed again until the playhead moves, so a file
-# just saved doesn't show as changed right away.
-_state = {"scene": None, "hold": None}
+# just saved doesn't show as changed right away. "full": the window the
+# steps grow to; "steps": the windows to go through, "step" the one set and
+# "step_at" when it was set (by _now).
+_state = {"scene": None, "hold": None,
+          "full": None, "steps": [], "step": 0, "step_at": 0.0}
+_now = time.monotonic
+
+
+def _let_go():
+    """Forgets the borrowed range and its steps."""
+    _state.update(scene=None, full=None, steps=[], step=0)
 
 
 # The user's preview range and the borrowed one
@@ -85,7 +104,7 @@ def release(scene):
         _give_back(scene, m)
     _drop_marker(scene)
     if _state["scene"] == scene.name:
-        _state["scene"] = None
+        _let_go()
 
 
 def _turned_off(scene, m):
@@ -109,7 +128,7 @@ def release_all():
             release(scene)
         except Exception as e:
             print("Cache Window: couldn't hand back the range of", scene.name, e)
-    _state["scene"] = None
+    _let_go()
 
 
 def borrow(scene, start, end):
@@ -195,7 +214,7 @@ def update(scene, prefs):
     if _state["scene"] not in (None, scene.name):
         other = bpy.data.scenes.get(_state["scene"])
         release(other)
-        _state["scene"] = None
+        _let_go()
     ed = scene.sequence_editor
     if ed is None or not getattr(ed, "use_prefetch", False) or _is_playing():
         release(scene)
@@ -211,13 +230,13 @@ def update(scene, prefs):
         # wait for the playhead to move before borrowing again
         _give_back(scene, m)
         _drop_marker(scene)
-        _state["scene"] = None
+        _let_go()
         _state["hold"] = (scene.name, scene.frame_current)
         return TICK
     if m is not None and not _is_ours(scene, m):
         # The user changed the range while it was borrowed: it's theirs now
         _drop_marker(scene)
-        _state["scene"] = None
+        _let_go()
         m = None
     if m is None and scene.use_preview_range:
         return IDLE_TICK  # the user's own preview range is on: stay out
@@ -225,10 +244,44 @@ def update(scene, prefs):
     if want is None:
         release(scene)
         return IDLE_TICK
-    current = (m["start"], m["end"]) if m is not None else None
+    current = None
+    if m is not None:
+        current = (m["start"], m["end"])
+        steps = _state["steps"]
+        if steps and _state["step"] < len(steps) and current == steps[_state["step"]]:
+            # Still the step the add-on set: judge by where it's growing to.
+            # Anything else (an undo put back an earlier step) is judged by
+            # what's set, so it grows again.
+            current = _state["full"]
     if window.should_move(scene.frame_current, current, want):
-        borrow(scene, *want)
+        fps = scene.render.fps / (scene.render.fps_base or 1.0)
+        _state["full"] = want
+        _state["steps"] = window.steps(
+            scene.frame_current, want, round(STEP_SECONDS * fps))
+        _state["step"] = 0
+        _set_step(scene, ed)
+    elif (_state["step"] + 1 < len(_state["steps"])
+          and _now() - _state["step_at"] >= STEP_WAIT):
+        _state["step"] += 1
+        _set_step(scene, ed)
     return TICK
+
+
+def _set_step(scene, ed):
+    """Borrows the current step's window and restarts prefetch, so it fills
+    the new frames from where this step starts."""
+    borrow(scene, *_state["steps"][_state["step"]])
+    _state["step_at"] = _now()
+    restart_prefetch(ed)
+
+
+def restart_prefetch(ed):
+    """Stops prefetch and lets it start again from just behind the playhead.
+    The cache is kept. Prefetch is always left on."""
+    try:
+        ed.use_prefetch = False
+    finally:
+        ed.use_prefetch = True
 
 
 def tick():

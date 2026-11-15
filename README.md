@@ -19,6 +19,13 @@ window around the playhead (4 s behind and 4 s ahead by default). Prefetch
 fills both sides, and the cache keeps them. When the playhead gets near an
 edge of the window, the window moves with it.
 
+Prefetch fills a range in one order: from the playhead to the end, then
+from the start of the range back up to the playhead. Set all at once, the
+frames just behind the playhead would come last. So the window grows in
+steps: a second behind the playhead at a time, with prefetch restarted at
+each step, then the full width ahead. The frames you're most likely to
+step back to are cached first.
+
 ## What you'll notice
 
 - While paused, the timeline outside the window is shaded, as with any

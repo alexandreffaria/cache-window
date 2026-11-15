@@ -78,6 +78,38 @@ class ShouldMoveTest(unittest.TestCase):
         self.assertFalse(window.should_move(3, current, window.plan(3, 1, 10000, 240, 240)))
 
 
+class StepsTest(unittest.TestCase):
+    def test_grows_behind_a_band_at_a_time_then_full(self):
+        self.assertEqual(window.steps(1000, (760, 1240), 60), [
+            (940, 1060), (880, 1060), (820, 1060), (760, 1060), (760, 1240)])
+
+    def test_each_step_contains_the_one_before(self):
+        out = window.steps(1000, (700, 1300), 70)
+        for a, b in zip(out, out[1:]):
+            self.assertLessEqual(b[0], a[0])
+            self.assertGreaterEqual(b[1], a[1])
+
+    def test_last_step_is_the_full_window(self):
+        self.assertEqual(window.steps(1000, (760, 1240), 60)[-1], (760, 1240))
+        self.assertEqual(window.steps(1000, (760, 1240), 10_000), [(760, 1240)])
+
+    def test_nothing_behind(self):
+        self.assertEqual(window.steps(1, (1, 481), 60), [(1, 61), (1, 481)])
+
+    def test_nothing_ahead(self):
+        self.assertEqual(window.steps(100, (40, 100), 30), [(70, 100), (40, 100)])
+
+    def test_never_more_than_max_steps_behind(self):
+        out = window.steps(100_000, (64_000, 136_000), 60)
+        self.assertLessEqual(len(out), window.MAX_STEPS + 1)
+        self.assertEqual(out[-1], (64_000, 136_000))
+
+    def test_tiny_step_still_moves(self):
+        out = window.steps(10, (5, 15), 0)
+        self.assertEqual(out[0], (9, 11))
+        self.assertEqual(out[-1], (5, 15))
+
+
 class BudgetTest(unittest.TestCase):
     def test_preview_scale(self):
         self.assertEqual(window.preview_scale("PROXY_25", 100), 0.25)
