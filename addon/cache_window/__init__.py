@@ -246,7 +246,13 @@ def update(scene, prefs):
         return IDLE_TICK
     current = None
     if m is not None:
-        current = _state["full"] or (m["start"], m["end"])
+        current = (m["start"], m["end"])
+        steps = _state["steps"]
+        if steps and _state["step"] < len(steps) and current == steps[_state["step"]]:
+            # Still the step the add-on set: judge by where it's growing to.
+            # Anything else (an undo put back an earlier step) is judged by
+            # what's set, so it grows again.
+            current = _state["full"]
     if window.should_move(scene.frame_current, current, want):
         fps = scene.render.fps / (scene.render.fps_base or 1.0)
         _state["full"] = want

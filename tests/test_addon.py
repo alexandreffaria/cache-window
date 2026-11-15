@@ -208,6 +208,18 @@ class AddonTest(unittest.TestCase):
         self.assertEqual(self.user_range(), (True, 1940, 2060))
         self.assertEqual(self.scene["cache_window"]["user_start"], 100)
 
+    def test_an_undone_step_grows_again(self):
+        # Ctrl+Z after an edit made mid-steps puts back an earlier step's
+        # range together with its marker
+        self.tick()
+        self.scene.frame_preview_start = 940
+        self.scene.frame_preview_end = 1060
+        self.scene["cache_window"]["start"] = 940
+        self.scene["cache_window"]["end"] = 1060
+        self.tick()
+        self.assertEqual(self.user_range(), (True, 880, 1120))
+        self.assertEqual(self.scene["cache_window"]["user_start"], 100)
+
     def test_small_moves_keep_the_window(self):
         self.tick()
         self.scene.frame_current = 1040
