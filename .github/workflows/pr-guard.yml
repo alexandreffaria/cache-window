@@ -1,0 +1,58 @@
+# The mechanical items of .github/REVIEW_CHECKLIST.md on every pull request:
+# the base is main, at most 2 PRs are open, and no commit adds a large,
+# binary or secret file.
+name: PR guard
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+concurrency:
+  group: pr-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    name: PR guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Base and head branches
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          if [ "$HEAD" = main ]; then
+            echo "::error::A PR from main. Open it from a work branch."
+            exit 1
+          fi
+          if [ "$BASE" != main ]; then
+            echo "::error::Base is $BASE, not main. No stacked PRs."
+            exit 1
+          fi
+          echo "$HEAD -> $BASE"
+
+      # The two oldest open PRs pass; a third and later one fails until one merges
+      - name: At most 2 open PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          open=$(gh api "repos/$REPO/pulls?state=open&per_page=100&sort=created&direction=asc" --jq '.[].number')
+          echo "Open PRs, oldest first:" $open
+          place=$(echo "$open" | grep -nx "$NUMBER" | cut -d: -f1)
+          if [ -n "$place" ] && [ "$place" -gt 2 ]; then
+            echo "::error::This is open PR number $place. At most 2 may be open; merge or close one first."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: No large, binary or secret files
+        run: bash scripts/pr-guard.sh "origin/${{ github.base_ref }}" "${{ github.event.pull_request.head.sha }}"

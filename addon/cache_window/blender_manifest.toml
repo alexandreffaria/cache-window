@@ -1,0 +1,14 @@
+schema_version = "1.0.0"
+
+id = "cache_window"
+version = "0.1.0"
+name = "Cache Window"
+tagline = "Keep the video editor's cache around the playhead, not only ahead"
+maintainer = "Cache Window contributors"
+type = "add-on"
+website = "https://github.com/alexandreffaria/cache-window"
+tags = ["Sequencer"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:MIT"]

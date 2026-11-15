@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  addon:
+    name: Add-on
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -I -m unittest discover -s tests -v
+      - name: Compiles
+        run: python -m compileall -q addon scripts tests
+      - name: Package
+        run: python -I scripts/build_addon.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cache-window
+          path: dist/cache-window.zip
